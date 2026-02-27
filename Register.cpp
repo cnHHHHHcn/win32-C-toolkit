@@ -1,5 +1,6 @@
 #include "Register.h"
 
+
 HKEY REG::GetRootKeyHandle(Tstring &Path) {
 	Path = (Path.substr(0, PathHeadSize) == TEXTEx("¼ÆËã»ú\\")) ? Path.substr(PathHeadSize) : Path;
 	m_REGInfo.RootKeyName = Path.substr(0, Path.find(TEXTEx("\\")));
@@ -501,8 +502,9 @@ void REGFunc::SetFileAssociation(Tstring FileSuffix, REGFunc::FileSuffixInfo FSI
 void REGFunc::SetGeneralPopupMenu(REGFunc::FileMenuInfo FMInfo) {
 	this->SetFilePopupMenu(TEXTEx("HKEY_CLASSES_ROOT\\*\\shell"), FMInfo);
 }
-bool REGFunc::Product(Tstring ProgramPath, REGFunc::ProductInfo PInfo) {
-	Tstring InstallPath = TEXTEx("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall");
+bool REGFunc::Product(Tstring ProgramPath, REGFunc::ProductInfo PInfo, bool is_Current) {
+	Tstring RootKey = (is_Current ? TEXTEx("HKEY_LOCAL_MACHINE") : TEXTEx("HKEY_CURRENT_USER"));
+	Tstring InstallPath = RootKey  + TEXTEx("\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall");
 	Tstring FileName = this->GetFileName(ProgramPath); bool RTN = false;
 	switch (PInfo.State) {
 	case REGFunc::Install:

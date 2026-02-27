@@ -1,3 +1,5 @@
+#pragma once
+
 #include <fstream>
 #include <string>
 #include <map>
@@ -5,8 +7,6 @@
 #include <sstream>
 #include <locale>
 #include <codecvt>
-
-#pragma once
 
 class Configuration
 {

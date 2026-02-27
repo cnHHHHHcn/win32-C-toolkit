@@ -1,3 +1,5 @@
+#pragma once
+
 #include <windows.h>
 #include <winternl.h>
 #include <intrin.h>
@@ -12,13 +14,11 @@
 #pragma comment(lib, "ntdll.lib")
 #pragma comment(lib, "psapi.lib")
 
-#pragma	once
-
 class CheatMemory {
 public:
 #if defined(_M_IX86) || defined( __i386) || defined(_M_ARM) || defined(__arm__)              // x86 平台
 	#define AddressSize  4                   // 指针大小（4字节）	
-	#define dllPathOffset 8                 // DLL路径 地址 偏移
+	#define dllPathOffset 8                  // DLL路径 地址 偏移
 	#define LoadLibraryOffset 13             // LoadLibraryW 地址 偏移
 	#define originalUpOffset 27			     // 原始 指令地址 偏移
 	typedef DWORD32 DWORD_PTR;               // 32位指针类型

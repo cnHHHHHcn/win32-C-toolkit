@@ -1,11 +1,11 @@
+#pragma once
+
 #include <fstream>
 #include <strstream>
 #include <string>
 #include <locale>
 #include <codecvt>
 #include <ctime>
-
-#pragma once
 
 class Logger
 {
@@ -16,6 +16,7 @@ public:
 	~Logger();
 	void SetFile(std::wstring File);
 	std::wstring GetFile();
+	std::wstring GetTime();
 	void Info(std::wstring Message);
 	void Debug(std::wstring Message);
 	void Warn(std::wstring Message);

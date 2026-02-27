@@ -5,6 +5,10 @@
 * Tstring数据类型、TEXTEx方法、to_Tstring方法 会根据使用字符集版本
 * 将字符串自动转化为string(ANSI)、wstring(UNICODE)类型
 * 其余的不再赘述(调用方法不会用到)，如上述同理。
+* 有什么好的建议或更好的优化方案，请向我致电
+* bilibili:
+* 大号:2459527 (不常使用)
+* 小号:hhh12345gh (经常使用)
 
 * 注:
 * 建议使用ANSI版本。
@@ -14,6 +18,9 @@
 * 注册表中的注册值容易乱码，其余没有问题。
 * 作者已经无能为力。
 */
+#pragma once
+
+#include <tchar.h>
 #include <windows.h>
 #include <type_traits>
 #include <string>
@@ -80,7 +87,6 @@ typedef const char* T_CCHAR;
 
 #define  NAME_BUFFER_SIZE  255
 #define DATA_BUFFER_SIZE 16383
-#pragma once
 
 using namespace std;
 class REG{
@@ -172,7 +178,7 @@ public:
     bool WinStartRun(Tstring ProgramPath, bool is_Current);   // 开机自启动
     void SetFileAssociation(Tstring FileSuffix, REGFunc::FileSuffixInfo FSInfo);   // 设置文件扩展名关联
     void SetGeneralPopupMenu(REGFunc::FileMenuInfo FMInfo);   // 设置通用右键弹出式菜单
-    bool Product(Tstring ProgramPath, REGFunc::ProductInfo PInfo);   // 产品注册安装与卸载
+    bool Product(Tstring ProgramPath, REGFunc::ProductInfo PInfo, bool is_Current);   // 产品注册安装与卸载
 
 private:
     REG Opera;

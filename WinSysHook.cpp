@@ -2,10 +2,10 @@
 
 #include "WinSysHook.h"
 
-WinSysHook* WinSysHook::pHook = nullptr;
+WinSysHook* pHook = nullptr;
 
 WinSysHook::WinSysHook() {
-    pHook = this;
+    //pHook = this;
 }
 
 WinSysHook::~WinSysHook() {
@@ -14,14 +14,20 @@ WinSysHook::~WinSysHook() {
 }
 
 // 设置钩子类型，并设置钩子
-bool WinSysHook::IntsallHook(WinSysHook::HookType hookID, DWORD ThreadId) {
-    HookHandle = SetWindowsHookEx(hookID, GetHookProc(hookID), GetModuleHandle(DLLName), ThreadId);
-    bool Flag = (HookHandle != NULL) ? (ID = hookID, true) : false;
+bool WinSysHook::InstallHook(WinSysHook::HookType hookID, DWORD ThreadId) {
+    if (HookHandle) UnInstallHook();
+    bool Flag = false;
+    if (HookHandle == NULL) {
+        HookHandle = SetWindowsHookEx(hookID, GetHookProc(hookID), GetModuleHandle(DLLName), ThreadId);
+        Flag = (HookHandle != NULL) ? (ID = hookID, true) : false;
+        if(Flag) HookList.insert({ HookHandle, this });
+    }
     return Flag;
 }
 
 // 卸载钩子
 bool WinSysHook::UnInstallHook() {
+    HookList.erase(HookHandle);
     bool Flag = UnhookWindowsHookEx(HookHandle) != 0;
     HookHandle = NULL;
     ID = HOOK_NULL;
@@ -44,6 +50,11 @@ void WinSysHook::DispatchMSG() {
     }
 }
 
+void WinSysHook::SetHookObject(HHOOK hHook)
+{
+    pHook = HookList[hHook];
+}
+
 // 获取所对应钩子类型的函数地址
 HOOKPROC WinSysHook::GetHookProc(WinSysHook::HookType ID) {
     switch (ID) {
@@ -64,7 +75,7 @@ HOOKPROC WinSysHook::GetHookProc(WinSysHook::HookType ID) {
 
 // 静态回调函数实现
 LRESULT CALLBACK WinSysHook::KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    KBDLLHOOKSTRUCT* keyInfo = (KBDLLHOOKSTRUCT*)lParam;
+    KBDLLHOOKSTRUCT* keyboard = (KBDLLHOOKSTRUCT*)lParam;
     if (pHook && nCode >= 0) {
         return pHook->OnKeyboard(nCode, wParam, lParam);
     }
@@ -72,7 +83,7 @@ LRESULT CALLBACK WinSysHook::KeyboardProc(int nCode, WPARAM wParam, LPARAM lPara
 }
 
 LRESULT CALLBACK WinSysHook::KeyboardLLProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    KBDLLHOOKSTRUCT* keyInfo = (KBDLLHOOKSTRUCT*)lParam;
+    KBDLLHOOKSTRUCT* keyboard = (KBDLLHOOKSTRUCT*)lParam;
     if (pHook && nCode >= 0) {
         return pHook->OnKeyboardLL(nCode, wParam, lParam);
     }
@@ -154,15 +165,17 @@ LRESULT WinSysHook::ForegroundIdle(int nCode, WPARAM wParam, LPARAM lParam) {
 
 // 默认的虚函数实现（空实现，子类需要重写）
 LRESULT WinSysHook::OnKeyboard(int nCode, WPARAM wParam, LPARAM lParam) {
+    KBDLLHOOKSTRUCT* keyboard = (KBDLLHOOKSTRUCT*)lParam;
     return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
 LRESULT WinSysHook::OnKeyboardLL(int nCode, WPARAM wParam, LPARAM lParam) {
-    KBDLLHOOKSTRUCT* keyInfo = (KBDLLHOOKSTRUCT*)lParam;
+    KBDLLHOOKSTRUCT* keyboard = (KBDLLHOOKSTRUCT*)lParam;
     return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
 LRESULT WinSysHook::OnMouse(int nCode, WPARAM wParam, LPARAM lParam) {
+    MSLLHOOKSTRUCT* mouseInfo = (MSLLHOOKSTRUCT*)lParam;
     return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 

@@ -5,9 +5,9 @@
 Logger::Logger(std::wstring File)
 {
 	if (File.empty()) return;
-	m_File = File;
+	m_File = File; std::locale::global(std::locale(""));
 	fileOpera.open(wstring_to_string(File), std::ios::in | std::ios::out | std::ios::app);
-	FileState = fileOpera.is_open();
+	FileState = fileOpera.is_open(); fileOpera.imbue(std::locale(fileOpera.getloc(), new std::codecvt_utf8<wchar_t>));
 }
 
 Logger::~Logger()
@@ -18,12 +18,23 @@ Logger::~Logger()
 void Logger::SetFile(std::wstring File)
 {
 	if (!m_File.empty()) fileOpera.close(); 
-	m_File = File;
+	std::locale::global(std::locale(""));
 	fileOpera.open(wstring_to_string(File), std::ios::in | std::ios::out | std::ios::app);
-	FileState = fileOpera.is_open();
+	FileState = fileOpera.is_open(); fileOpera.imbue(std::locale(fileOpera.getloc(), new std::codecvt_utf8<wchar_t>));
 }
 
+
 std::wstring Logger::GetFile(){	return m_File; }
+
+std::wstring Logger::GetTime()
+{
+	time_t Currenttime = time(0); tm timeInfo = { 0 }; localtime_s(&timeInfo, &Currenttime);
+	std::wstring strCurTime;
+	strCurTime.append(
+		std::to_wstring(timeInfo.tm_year + 1900) + L"/" + std::to_wstring(timeInfo.tm_mon + 1) + L"/" + std::to_wstring(timeInfo.tm_mday) + L" " + 
+		std::to_wstring(timeInfo.tm_hour) + L":" + std::to_wstring(timeInfo.tm_min) + L":" + std::to_wstring(timeInfo.tm_sec));
+	return strCurTime;
+}
 
 void Logger::Info(std::wstring Message){ LogOut(LOG_INFO, Message); }
 
@@ -41,10 +52,7 @@ void Logger::LogOut(Level level, std::wstring Message)
 	case LOG_WARN:  fileOpera << L"[WARN,";  break;
 	case LOG_ERROR: fileOpera << L"[ERROR,";
 	}
-	time_t Currenttime = time(0); tm timeInfo = {0}; localtime_s(&timeInfo, &Currenttime);
-	fileOpera << timeInfo.tm_year + 1900 << L"/" << timeInfo.tm_mon + 1 << L"/" << timeInfo.tm_mday << L" "
-			  << timeInfo.tm_hour << L":" << timeInfo.tm_min << L":" << timeInfo.tm_sec << L"]"  
-			  << Message << std::endl;
+	fileOpera << GetTime() << L"]" << Message;
 
 }
 

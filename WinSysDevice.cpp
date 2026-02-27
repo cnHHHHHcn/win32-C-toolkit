@@ -1,20 +1,32 @@
+#include "pch.h"
 
 #include "WinSysDevice.h"
-#include <fstream>
 
+#if defined(DESKTOP)
+// 获取屏幕桌面大小尺寸
+WinSysDevice::WinSize WinSysDevice::GetDesktopSize() {
+    RECT Area; WinSysDevice::WinSize RTN;
+    GetWindowRect(GetDesktopWindow(), &Area);
+    RTN.Width = Area.right - Area.left;
+    RTN.Height = Area.bottom - Area.top;
+    return RTN;
+}
+#endif  // DESKTOP
+
+#if defined(MOUSE)
 // 鼠标输出
 void WinSysDevice::MouseSend(WinSysDevice::MouseInfo Data) {
     INPUT MouseData[1] = {INPUT_MOUSE};     // 输入类型为 鼠标
     ZeroMemory(&MouseData, sizeof(MouseData));   // 结构体 INPUT 初始化
     // 设置鼠标滚轮
-    if (Data.WheelMove != Mouse::MouseNULL) { 
+    if (Data.WheelMove != NULL) { 
         MouseData[0].mi.dwFlags = MOUSEEVENTF_WHEEL; 
         MouseData[0].mi.mouseData = Data.WheelMove;
     }
     // 设置鼠标位置
     if (Data.AbsolutePos.x != 0 && Data.AbsolutePos.y != 0) {
         // 相对位置
-        MouseData[0].mi.dwFlags = MouseData[0].mi.dwFlags | MOUSEEVENTF_MOVE;
+        MouseData[0].mi.dwFlags |= MOUSEEVENTF_MOVE;
         MouseData[0].mi.dx = Data.AbsolutePos.x;
         MouseData[0].mi.dy = Data.AbsolutePos.y;
     }else {
@@ -23,6 +35,56 @@ void WinSysDevice::MouseSend(WinSysDevice::MouseInfo Data) {
     }
     // 输出
     SendInput(ARRAYSIZE(MouseData), MouseData, sizeof(INPUT));
+}
+
+WinSysDevice::MouseKey WinSysDevice::ExchangeMouseMSG(UINT MouseMSG)
+{
+    const BYTE ErrorMax = 3;   // 最大差值为 3 
+    static USHORT DownCount; MouseKey Key;
+    static bool LButtonDown, RButtonDown, MButtonDown;
+    if (!(LButtonDown || RButtonDown || MButtonDown) && MouseMSG == WM_MOUSEMOVE) goto NoClick;
+    switch (MouseMSG) {
+    case WM_LBUTTONDOWN:
+        LButtonDown = true;
+        DownCount = 0;
+        break;
+    case WM_LBUTTONUP:
+        if (LButtonDown && (0 <= DownCount && DownCount <= ErrorMax)) {
+            LButtonDown = false;
+            return WinSysDevice::LeftClick;
+        }
+        LButtonDown = false;
+        return WinSysDevice::LeftUp;
+    case WM_RBUTTONDOWN:
+        RButtonDown = true;
+        DownCount = 0;
+        break;
+    case WM_RBUTTONUP:
+        if (RButtonDown && (0 <= DownCount && DownCount <= ErrorMax)) {
+            RButtonDown = false;
+            return WinSysDevice::RightClick;
+        }
+        RButtonDown = false;
+        return WinSysDevice::RightUp;
+    case WM_MBUTTONDOWN:
+        MButtonDown = true;
+        DownCount = 0;
+        break;
+    case WM_MBUTTONUP:
+        if (MButtonDown && (0 <= DownCount && DownCount <= ErrorMax)) {
+            MButtonDown = false;
+            return WinSysDevice::MiddleClick;
+        }
+        MButtonDown = false;
+        return WinSysDevice::MiddleUp;
+    case WM_MOUSEMOVE:
+        DownCount++;
+        if (LButtonDown) return WinSysDevice::LeftDown;
+        if (RButtonDown) return WinSysDevice::RightDown;
+        if (MButtonDown) return WinSysDevice::MiddleDown;
+    }
+NoClick:
+    return WinSysDevice::MouseNULL;
 }
 
 // 获取鼠标相对位置
@@ -42,15 +104,56 @@ POINT WinSysDevice::GetScreenPos() {
     return RTNPos;
 }
 
-// 获取屏幕桌面大小尺寸
-WinSysDevice::WinSize WinSysDevice::GetDesktopSize() {
-    RECT Area; WinSysDevice::WinSize RTN;
-    GetWindowRect(GetDesktopWindow(), &Area);
-    RTN.Width = Area.right - Area.left;
-    RTN.Height = Area.bottom - Area.top;
-    return RTN;
-}
+bool WinSysDevice::DisplayMouseInfo(MouseInfo Data, POINT PreviousPoint)
+{
+    HDC hdc = GetDC(NULL);
+    COLORREF PenColor = 0xFFFFFFFF;  // 白色
+    switch (Data.Key) {
+    case LeftClick:
+    case LeftDown:
+    case LeftUp:
+        PenColor = RGB(255, 0, 0);
+        break;
+    case RightClick:
+    case RightDown:
+    case RightUp:
+        PenColor = RGB(0, 255, 0);
+        break;
+    case MiddleClick:
+    case MiddleDown:
+    case MiddleUp:
+        PenColor = RGB(0, 0, 255);
+        break;
+    }
+    HPEN hPen = CreatePen(PS_SOLID, 5, PenColor);
+    HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+    int PosX = Data.ScreenPos.x, PosY = Data.ScreenPos.y;
+    if (Data.AbsolutePos.x != MouseNULL && Data.AbsolutePos.y != MouseNULL) {
+        if (PreviousPoint.x == NULL && PreviousPoint.y == NULL) GetCursorPos(&PreviousPoint);
+        PosX = Data.AbsolutePos.x + PreviousPoint.x;
+        PosY = Data.AbsolutePos.y + PreviousPoint.y;
+    }
 
+    // --- 画十字逻辑 ---
+    int len = 15; // 十字臂的长度 (总长度是 30)
+
+    // 1. 画横线
+    MoveToEx(hdc, PosX - len, PosY, NULL);
+    LineTo(hdc, PosX + len, PosY);
+
+    // 2. 画竖线
+    MoveToEx(hdc, PosX, PosY - len, NULL);
+    LineTo(hdc, PosX, PosY + len);
+    // ------------------
+
+    SelectObject(hdc, hOldPen);
+    DeleteObject(hOldPen);
+    ReleaseDC(NULL, hdc);
+    return true;
+}
+#endif  // MOUSE
+
+#if defined(KEYBOARD)
 // 键盘输出(除去汉字)
 void WinSysDevice::KeyboardSend(std::wstring WordData, bool WithShift) {
     std::vector<INPUT> KeyboardData; 
@@ -85,10 +188,10 @@ void WinSysDevice::CtrlHotKey(WinSysDevice::ControlHotKey Flag) {
     for (int i = 0; i < 4; i++) {
         KeyInfo[i].type = INPUT_KEYBOARD;
     }
-    KeyInfo[0].ki.wVk = Keyboard::Crtl;
+    KeyInfo[0].ki.wVk = KeyboardKey::Crtl;
     KeyInfo[1].ki.wVk = Flag;
     KeyInfo[2].ki.wVk = Flag;
-    KeyInfo[3].ki.wVk = Keyboard::Crtl;
+    KeyInfo[3].ki.wVk = KeyboardKey::Crtl;
     KeyInfo[2].ki.dwFlags = KEYEVENTF_KEYUP;
     KeyInfo[3].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(4, KeyInfo, sizeof(INPUT));
@@ -97,7 +200,7 @@ void WinSysDevice::CtrlHotKey(WinSysDevice::ControlHotKey Flag) {
 // 输入法获取与切换
 WinSysDevice::LayoutMap WinSysDevice::InputMethod(WinSysDevice::LayoutOpera Flag, HKL HandleKeyboardLayout) {
     LayoutMap RTN;
-    RTN[0] = {L"", L"", 0};
+    ZeroMemory(&RTN[0], sizeof(LayoutMap));
     InputInfo Temp;
     switch (Flag) {
     case LayoutOpera::List_All:
@@ -115,134 +218,6 @@ WinSysDevice::LayoutMap WinSysDevice::InputMethod(WinSysDevice::LayoutOpera Flag
     }
     return RTN;
 }
-
-// 剪贴板设置数据(ANSI版本)
-bool WinSysDevice::ClipboardSetA(std::string ClipData) {
-    if (!OpenClipboard(NULL)) return false;
-    EmptyClipboard();
-    HGLOBAL hGlobalText = GlobalAlloc(GHND, ClipData.size() + 1);
-    char* pClipData = (char*)GlobalLock(hGlobalText);
-    strcpy_s(pClipData, ClipData.size() + 1, ClipData.c_str());
-    GlobalUnlock(hGlobalText);
-    SetClipboardData(CF_TEXT, hGlobalText);
-    CloseClipboard();
-    return true;
-}
-// 剪贴板获取数据(ANSI版本)
-std::string WinSysDevice::ClipboardGetA() {
-    if (!OpenClipboard(NULL)) return "";
-    HANDLE hGlobalText = GetClipboardData(CF_TEXT);
-    if (!hGlobalText) return "";
-    char* pClipData = (char*)GlobalLock(hGlobalText);
-    GlobalUnlock(hGlobalText);
-    CloseClipboard();
-    return std::string(pClipData);
-}
-
-// 剪贴板输出(ANSI版本)
-void WinSysDevice::ClipboardSendA(std::string ClipData, int DelaySecond) {
-    ClipboardSetA(ClipData);
-    Sleep(DelaySecond * 1000);
-    CtrlHotKey(ControlHotKey::Paste);
-}
-
-// 剪贴板设置数据(UNICODE版本)
-bool WinSysDevice::ClipboardSetW(std::wstring ClipData) {
-    if (!OpenClipboard(NULL)) return false;
-    EmptyClipboard();
-    HGLOBAL hGlobalText = GlobalAlloc(GHND, (ClipData.size() + 1) * sizeof(wchar_t));
-    wchar_t* pClipData = (wchar_t*)GlobalLock(hGlobalText);
-    wcscpy_s(pClipData, (ClipData.size() + 1) * sizeof(wchar_t) , ClipData.c_str());
-    GlobalUnlock(hGlobalText);
-    SetClipboardData(CF_UNICODETEXT, hGlobalText);
-    CloseClipboard();
-    return true;
-}
-
-// 剪贴板获取数据(UNICODE版本)
-std::wstring WinSysDevice::ClipboardGetW() {
-    if (!OpenClipboard(NULL)) return TEXT("");
-    HANDLE hGlobalText = GetClipboardData(CF_UNICODETEXT);
-    if (!hGlobalText) return TEXT("");
-    wchar_t* pClipData = (wchar_t*)GlobalLock(hGlobalText);
-    GlobalUnlock(hGlobalText);
-    CloseClipboard();
-    return std::wstring(pClipData);
-}
-
-// 剪贴板输出(UNICODE版本)
-void WinSysDevice::ClipboardSendW(std::wstring ClipData, int DelaySecond) {
-    ClipboardSetW(ClipData);
-    Sleep(DelaySecond * 1000);
-    CtrlHotKey(ControlHotKey::Paste);
-}
-
-// 清除剪贴板内容
-bool WinSysDevice::ClipboardClear() {
-    if (!OpenClipboard(NULL)) return false;
-    EmptyClipboard();
-    CloseClipboard();
-    return true;
-}
-
-void WinSysDevice::CaptureDesktop(const char* FileName) {
-    // 获取屏幕DC
-    HDC hdcScreen = GetDC(NULL);
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    RECT Area; GetWindowRect((HWND)0x00010132, &Area);
-    int screenWidth = Area.right;
-    int screenHeight = Area.bottom;
-    // 创建兼容位图
-    HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, screenWidth, screenHeight);
-    SelectObject(hdcMem, hBitmap);
-    // 复制屏幕到内存DC
-    BitBlt(hdcMem, 0, 0, screenWidth, screenHeight, hdcScreen, 0, 0, SRCCOPY);
-    // 保存到文件
-    SaveBitmapToFile(hBitmap, FileName);
-    // 清理
-    DeleteObject(hBitmap);
-    DeleteDC(hdcMem);
-    ReleaseDC(NULL, hdcScreen);
-}
-
-void WinSysDevice::CaptureWindow(HWND Handle, const char* FileName) {
-    // 获取 窗口DC
-    HDC hdcWindow = GetWindowDC(Handle);
-    HDC hdcMem = CreateCompatibleDC(hdcWindow);
-    // 获取 窗口大小
-    RECT Area; GetWindowRect(Handle, &Area);
-    int WindowWidth = Area.right - Area.left;
-    int WindowHeight = Area.bottom - Area.top;
-    // 创建兼容位图
-    HBITMAP hBitmap = CreateCompatibleBitmap(hdcWindow, WindowWidth, WindowHeight);
-    SelectObject(hdcMem, hBitmap);
-    // 复制屏幕到内存DC
-    BitBlt(hdcMem, 0, 0, WindowWidth, WindowHeight, hdcWindow, 0, 0, SRCCOPY);
-    // 保存到文件
-    SaveBitmapToFile(hBitmap, FileName);
-    // 清理
-    DeleteObject(hBitmap);
-    DeleteDC(hdcMem);
-    ReleaseDC(NULL, hdcWindow);
-}
-
-void WinSysDevice::CaptureScreenArea(int x, int y, int Width, int Height, const char* FileName) {
-    // 获取屏幕DC
-    HDC hdcScreen = GetDC(NULL);
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    // 创建兼容位图
-    HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, Width, Height);
-    SelectObject(hdcMem, hBitmap);
-    // 复制屏幕到内存DC
-    BitBlt(hdcMem, 0, 0, Width, Height, hdcScreen, x, y, SRCCOPY);
-    // 保存到文件
-    SaveBitmapToFile(hBitmap, FileName);
-    // 清理
-    DeleteObject(hBitmap);
-    DeleteDC(hdcMem);
-    ReleaseDC(NULL, hdcScreen);
-}
-
 
 // 获取当前键盘布局句柄
 HKL WinSysDevice::GetCurrentKeyboardLayout() {
@@ -333,14 +308,14 @@ bool WinSysDevice::SwitchToNextKeyboardLayout() {
 bool WinSysDevice::SetKeyboardLayout(HKL HandleKeyboardLayout) {
     int Count = GetKeyboardLayoutList(0, NULL), i;
     for (i = 0; i < Count; i++) {
-        this->SwitchToNextKeyboardLayout();
+        this->SwitchToNextKeyboardLayout(); Sleep(10);
         if (HandleKeyboardLayout == GetCurrentKeyboardLayout()) break;
     }
     return Count != i;
 }
 
 // 显示当前键盘布局信息
-void WinSysDevice::DisplayCurrentLayoutInfo(InputInfo &LayoutInfo) {
+void WinSysDevice::DisplayCurrentLayoutInfo(InputInfo& LayoutInfo) {
     HKL currentLayout = GetCurrentKeyboardLayout();
     LayoutInfo.LayoutName = GetKeyboardLayoutNames(currentLayout);
     LayoutInfo.LanguageName = GetKeyboardLayoutLanguageName(currentLayout);
@@ -348,7 +323,7 @@ void WinSysDevice::DisplayCurrentLayoutInfo(InputInfo &LayoutInfo) {
 }
 
 // 显示所有可用的键盘布局
-void WinSysDevice::DisplayAvailableLayouts(std::map<int, InputInfo> &LayoutInfo) {
+void WinSysDevice::DisplayAvailableLayouts(std::map<int, InputInfo>& LayoutInfo) {
     std::map<int, HKL> layouts = GetAvailableKeyboardLayouts();
     for (size_t i = 0; i < layouts.size(); i++) {
         LayoutInfo[i].LayoutName = GetKeyboardLayoutNames(layouts[i]);
@@ -356,9 +331,141 @@ void WinSysDevice::DisplayAvailableLayouts(std::map<int, InputInfo> &LayoutInfo)
         LayoutInfo[i].LayoutHandle = layouts[i];
     }
 }
+#endif  // KEYBOARD
 
+#if defined(CLIPBOARD)
+// 剪贴板设置数据(ANSI版本)
+bool WinSysDevice::ClipboardSetTextA(std::string ClipData) {
+    if (!OpenClipboard(NULL)) return false;
+    EmptyClipboard();
+    HGLOBAL hGlobalText = GlobalAlloc(GHND, ClipData.size() + 1);
+    char* pClipData = (char*)GlobalLock(hGlobalText);
+    strcpy_s(pClipData, ClipData.size() + 1, ClipData.c_str());
+    GlobalUnlock(hGlobalText);
+    SetClipboardData(CF_TEXT, hGlobalText);
+    CloseClipboard();
+    return true;
+}
+// 剪贴板获取数据(ANSI版本)
+std::string WinSysDevice::ClipboardGetTextA() {
+    if (!OpenClipboard(NULL)) return "";
+    HANDLE hGlobalText = GetClipboardData(CF_TEXT);
+    if (!hGlobalText) return "";
+    char* pClipData = (char*)GlobalLock(hGlobalText);
+    GlobalUnlock(hGlobalText);
+    CloseClipboard();
+    return std::string(pClipData);
+}
 
-bool WinSysDevice::SaveBitmapToFile(HBITMAP hBitmap, const char* FileName) {
+// 剪贴板设置数据(UNICODE版本)
+bool WinSysDevice::ClipboardSetTextW(std::wstring ClipData) {
+    if (!OpenClipboard(NULL)) return false;
+    EmptyClipboard();
+    HGLOBAL hGlobalText = GlobalAlloc(GHND, (ClipData.size() + 1) * sizeof(wchar_t));
+    wchar_t* pClipData = (wchar_t*)GlobalLock(hGlobalText);
+    wcscpy_s(pClipData, (ClipData.size() + 1) * sizeof(wchar_t) , ClipData.c_str());
+    GlobalUnlock(hGlobalText);
+    SetClipboardData(CF_UNICODETEXT, hGlobalText);
+    CloseClipboard();
+    return true;
+}
+
+// 剪贴板获取数据(UNICODE版本)
+std::wstring WinSysDevice::ClipboardGetTextW() {
+    if (!OpenClipboard(NULL)) return TEXT("");
+    HANDLE hGlobalText = GetClipboardData(CF_UNICODETEXT);
+    if (!hGlobalText) return TEXT("");
+    wchar_t* pClipData = (wchar_t*)GlobalLock(hGlobalText);
+    GlobalUnlock(hGlobalText);
+    CloseClipboard();
+    return std::wstring(pClipData);
+}
+#if defined(KEYBOARD)
+// 剪贴板输出(ANSI版本)
+void WinSysDevice::ClipboardSendTextA(std::string ClipData, int Delay) {
+    ClipboardSetTextA(ClipData);
+    Sleep(Delay);
+    CtrlHotKey(ControlHotKey::Paste);
+}
+
+// 剪贴板输出(UNICODE版本)
+void WinSysDevice::ClipboardSendTextW(std::wstring ClipData, int Delay) {
+    ClipboardSetTextW(ClipData);
+    Sleep(Delay);
+    CtrlHotKey(ControlHotKey::Paste);
+}
+#endif  // KEYBOARD
+
+// 清除剪贴板内容
+bool WinSysDevice::ClipboardClear() {
+    if (!OpenClipboard(NULL)) return false;
+    EmptyClipboard();
+    CloseClipboard();
+    return true;
+}
+#endif  // CLIPBOARD
+
+#if defined(CAPTURE)
+#if defined(DESKTOP)
+void WinSysDevice::CaptureDesktop(const wchar_t* FileName) {
+    // 获取屏幕DC
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    WinSysDevice::WinSize Area = GetDesktopSize();
+    int screenWidth = Area.Width;
+    int screenHeight = Area.Height;
+    // 创建兼容位图
+    HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, screenWidth, screenHeight);
+    SelectObject(hdcMem, hBitmap);
+    // 复制屏幕到内存DC
+    BitBlt(hdcMem, 0, 0, screenWidth, screenHeight, hdcScreen, 0, 0, SRCCOPY);
+    // 保存到文件
+    SaveBitmapToFile(hBitmap, FileName);
+    // 清理
+    DeleteObject(hBitmap);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+}
+#endif  // DESKTOP
+void WinSysDevice::CaptureWindow(HWND Handle, const wchar_t* FileName) {
+    // 获取 窗口DC
+    HDC hdcWindow = GetWindowDC(Handle);
+    HDC hdcMem = CreateCompatibleDC(hdcWindow);
+    // 获取 窗口大小
+    RECT Area; GetWindowRect(Handle, &Area);
+    int WindowWidth = Area.right - Area.left;
+    int WindowHeight = Area.bottom - Area.top;
+    // 创建兼容位图
+    HBITMAP hBitmap = CreateCompatibleBitmap(hdcWindow, WindowWidth, WindowHeight);
+    SelectObject(hdcMem, hBitmap);
+    // 复制屏幕到内存DC
+    BitBlt(hdcMem, 0, 0, WindowWidth, WindowHeight, hdcWindow, 0, 0, SRCCOPY);
+    // 保存到文件
+    SaveBitmapToFile(hBitmap, FileName);
+    // 清理
+    DeleteObject(hBitmap);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcWindow);
+}
+
+void WinSysDevice::CaptureScreenArea(int x, int y, int Width, int Height, const wchar_t* FileName) {
+    // 获取屏幕DC
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    // 创建兼容位图
+    HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, Width, Height);
+    SelectObject(hdcMem, hBitmap);
+    // 复制屏幕到内存DC
+    BitBlt(hdcMem, 0, 0, Width, Height, hdcScreen, x, y, SRCCOPY);
+    // 保存到文件
+    SaveBitmapToFile(hBitmap, FileName);
+    // 清理
+    DeleteObject(hBitmap);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+}
+
+bool WinSysDevice::SaveBitmapToFile(HBITMAP hBitmap, const wchar_t* FileName) {
     BITMAP bmp;
     GetObject(hBitmap, sizeof(BITMAP), &bmp);
 
@@ -411,3 +518,4 @@ bool WinSysDevice::SaveBitmapToFile(HBITMAP hBitmap, const char* FileName) {
     ReleaseDC(NULL, hdc);
     return true;
 }
+#endif  // CAPTURE

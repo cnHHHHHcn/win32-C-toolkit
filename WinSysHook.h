@@ -1,6 +1,8 @@
-#include <Windows.h>
-
 #pragma once
+
+#include <Windows.h>
+#include <map>
+
 class WinSysHook {
 public:
     enum HookType {
@@ -21,12 +23,15 @@ public:
     HHOOK HookHandle = NULL;
     WinSysHook();
     virtual ~WinSysHook();
-    bool IntsallHook(WinSysHook::HookType hookID, DWORD ThreadId);   // 安装钩子
+    bool InstallHook(WinSysHook::HookType hookID, DWORD ThreadId);   // 安装钩子
     bool UnInstallHook();   // 卸载钩子
     void DispatchMSG();   // 发送 Windows Message ,与 InstallHook 连用
+    // 确保多个子类Hook实例继承基类触发多态回调成功，需要调用此方法来正确执行对应的子类Hook实例
+    void SetHookObject(HHOOK hHook);
 private:
     HookType ID = HOOK_NULL;
-    static WinSysHook *pHook;
+    typedef std::map<HHOOK, WinSysHook*> pHookMap;
+    pHookMap HookList;
     // 获取所对应钩子类型的函数地址
     HOOKPROC GetHookProc(WinSysHook::HookType hookID);
 
